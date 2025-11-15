@@ -1,14 +1,24 @@
-# Dockerfile 修正版 (请用此版本替换旧版本)
-# 使用预装了 GeoSpatial 库的 Alpine Python 镜像
-FROM python:3.11-alpine
+# Dockerfile 最终修正版：使用 Debian (slim) 基础镜像
+# Debian 更适合科学计算库，能有效避免 Alpine 的兼容性问题
+FROM python:3.11-slim-bookworm
 
-# 安装必要的系统库和 GeoSpatial 依赖
-# build-base 包含 gcc, g++, make 等构建工具
-# gfortran, lapack-dev, openblas-dev 用于 numpy/scipy 的高性能计算
-RUN apk update && \
-    apk add --no-cache bash build-base gfortran lapack-dev openblas-dev && \
-    # GeoSpatial 依赖
-    apk add --no-cache geos-dev proj-dev gdal-dev
+# 安装必要的系统依赖和 GeoSpatial 依赖
+# build-essential 相当于 build-base (提供 gcc, g++ 等)
+# libgdal-dev, libgeos-dev, libproj-dev 是 GeoSpatial 依赖的开发包
+# libatlas-base-dev 提供高性能线性代数库，帮助 NumPy 编译
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
+    libatlas-base-dev \
+    # 清理APT缓存以减小镜像大小
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置环境变量，确保 GeoPandas 的依赖 (Fiona/Rasterio) 能找到 GDAL
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
 
 # 设置工作目录
 WORKDIR /app
