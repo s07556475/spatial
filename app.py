@@ -23,21 +23,43 @@ class SpatialAnalysisAPI:
         self.w = None
         self.results = {}
     
-    def load_data(self, file_path, file_type='excel'):
+def load_data(self, file_path, file_type='excel'):
         """加载数据"""
         try:
             if file_type == 'excel':
+                # 尝试以 UTF-8 编码读取 Excel
                 self.data = pd.read_excel(file_path)
             elif file_type == 'csv':
+                # 尝试以 UTF-8 编码读取 CSV
                 self.data = pd.read_csv(file_path)
             
             # 创建必要的列
             self.data['id'] = range(1, len(self.data) + 1)
             if 'name' in self.data.columns:
                 self.data['city'] = pd.Categorical(self.data['name']).codes
+
+            # --- 关键修改：强制转换为数值并清理 NaN ---
+            if 'lat' in self.data.columns and 'lon' in self.data.columns:
+                
+                # 强制转换为数值类型，无法转换的变为 NaN
+                self.data['lat'] = pd.to_numeric(self.data['lat'], errors='coerce')
+                self.data['lon'] = pd.to_numeric(self.data['lon'], errors='coerce')
+                
+                # 移除包含 NaN 坐标的行，否则空间权重创建会失败
+                original_len = len(self.data)
+                self.data.dropna(subset=['lat', 'lon'], inplace=True)
+                
+                if self.data.empty:
+                    return False, "数据加载后为空，请检查文件内容和格式"
+                
+                if len(self.data) < original_len:
+                    print(f"警告：移除了 {original_len - len(self.data)} 行包含空坐标的数据。")
+            # ------------------------------------------
             
             return True, "数据加载成功"
         except Exception as e:
+            # 打印堆栈信息以便Render日志捕获
+            traceback.print_exc() 
             return False, f"数据加载失败: {str(e)}"
     
     def create_spatial_weights(self, lat_col='lat', lon_col='lon'):
@@ -139,6 +161,7 @@ def index():
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """上传数据文件"""
+    # 顶级 try-except 块，捕获所有意外的崩溃
     try:
         if 'file' not in request.files:
             return jsonify({'success': False, 'message': '没有文件上传'})
@@ -148,45 +171,44 @@ def upload_file():
             return jsonify({'success': False, 'message': '没有选择文件'})
         
         filename = secure_filename(file.filename)
-        # 使用 os.path.join 确保跨系统兼容
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
         
-        # 根据文件扩展名确定类型
         file_type = 'excel' if filename.lower().endswith(('.xlsx', '.xls')) else 'csv'
         
+        # 1. 尝试加载数据
         success, message = spatial_analyzer.load_data(file_path, file_type)
         
-        if success:
-            # 1. 获取数据基本信息
-            data_info = {
-                'columns': spatial_analyzer.data.columns.tolist(),
-                'shape': spatial_analyzer.data.shape,
-                'years': spatial_analyzer.data['year'].unique().tolist() if 'year' in spatial_analyzer.data.columns else []
-            }
-            
-            # 2. 尝试创建空间权重矩阵并捕获错误 (关键修改)
-            success_w, message_w = spatial_analyzer.create_spatial_weights()
-            
-            if not success_w:
-                # 如果创建权重失败，将详细错误返回给用户
-                return jsonify({
-                    'success': False,
-                    'message': f'数据加载成功，但空间权重创建失败：{message_w}。请检查您的Excel文件是否包含名为 "lat" (纬度) 和 "lon" (经度) 的坐标列。'
-                })
-
-            # 3. 成功返回
-            return jsonify({
-                'success': True,
-                'message': message + " 空间权重创建成功。",
-                'data_info': data_info
-            })
-        else:
+        if not success:
             return jsonify({'success': False, 'message': message})
+
+        # 2. 尝试创建空间权重矩阵
+        success_w, message_w = spatial_analyzer.create_spatial_weights()
+        
+        if not success_w:
+            # 如果创建权重失败 (如缺少坐标列，数据异常等)
+            return jsonify({
+                'success': False,
+                'message': f'数据加载成功，但空间权重创建失败：{message_w}。请检查您的Excel文件是否包含名为 "lat" 和 "lon" 的有效坐标列，并且所有坐标数据均为数字。'
+            })
+            
+        # 3. 成功返回
+        data_info = {
+            'columns': spatial_analyzer.data.columns.tolist(),
+            'shape': spatial_analyzer.data.shape,
+            'years': spatial_analyzer.data['year'].unique().tolist() if 'year' in spatial_analyzer.data.columns else []
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': "数据和空间权重创建成功。",
+            'data_info': data_info
+        })
             
     except Exception as e:
-        # 捕获其他未知错误
-        return jsonify({'success': False, 'message': f'上传失败: 服务器内部未知错误 ({str(e)})'})
+        # 捕获所有其他未知错误，并将堆栈信息打印到 Render 日志
+        traceback.print_exc() 
+        return jsonify({'success': False, 'message': f'上传失败: 服务器内部未知错误。请检查Render日志。'})
 
 @app.route('/api/moran', methods=['POST'])
 def moran_analysis():
@@ -256,3 +278,4 @@ def get_data_info():
 if __name__ == '__main__':
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
