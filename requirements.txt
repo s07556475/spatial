@@ -6,4 +6,5 @@ geopandas==0.13.2
 libpysal==4.7.0
 esda==2.4.3
 statsmodels==0.14.0
+spreg==1.2.5
 openpyxl==3.1.2
