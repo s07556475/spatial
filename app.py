@@ -11,6 +11,13 @@ import os
 import tempfile
 from werkzeug.utils import secure_filename
 import traceback
+from werkzeug.utils import secure_filename
+import traceback
+from spreg.ols import OLS
+from spreg.ml_lag import ML_Lag  # 最大似然空间滞后模型 (SDM/SAR)
+from spreg.ml_error import ML_Error # 最大似然空间误差模型 (SEM)
+from spreg.gmm import GM_Lag # 广义矩空间滞后模型 (如果您的代码使用了 GMM)
+from spreg.gmm import GM_Error # 广义矩空间误差模型 (如果您的代码使用了 GMM)
 
 app = Flask(__name__)
 CORS(app)
@@ -278,4 +285,5 @@ def get_data_info():
 if __name__ == '__main__':
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
