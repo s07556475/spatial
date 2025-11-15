@@ -148,6 +148,7 @@ def upload_file():
             return jsonify({'success': False, 'message': '没有选择文件'})
         
         filename = secure_filename(file.filename)
+        # 使用 os.path.join 确保跨系统兼容
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
         
@@ -157,26 +158,35 @@ def upload_file():
         success, message = spatial_analyzer.load_data(file_path, file_type)
         
         if success:
-            # 获取数据基本信息
+            # 1. 获取数据基本信息
             data_info = {
                 'columns': spatial_analyzer.data.columns.tolist(),
                 'shape': spatial_analyzer.data.shape,
                 'years': spatial_analyzer.data['year'].unique().tolist() if 'year' in spatial_analyzer.data.columns else []
             }
             
-            # 创建空间权重矩阵
-            spatial_analyzer.create_spatial_weights()
+            # 2. 尝试创建空间权重矩阵并捕获错误 (关键修改)
+            success_w, message_w = spatial_analyzer.create_spatial_weights()
             
+            if not success_w:
+                # 如果创建权重失败，将详细错误返回给用户
+                return jsonify({
+                    'success': False,
+                    'message': f'数据加载成功，但空间权重创建失败：{message_w}。请检查您的Excel文件是否包含名为 "lat" (纬度) 和 "lon" (经度) 的坐标列。'
+                })
+
+            # 3. 成功返回
             return jsonify({
                 'success': True,
-                'message': message,
+                'message': message + " 空间权重创建成功。",
                 'data_info': data_info
             })
         else:
             return jsonify({'success': False, 'message': message})
             
     except Exception as e:
-        return jsonify({'success': False, 'message': f'上传失败: {str(e)}'})
+        # 捕获其他未知错误
+        return jsonify({'success': False, 'message': f'上传失败: 服务器内部未知错误 ({str(e)})'})
 
 @app.route('/api/moran', methods=['POST'])
 def moran_analysis():
@@ -244,4 +254,5 @@ def get_data_info():
         return jsonify({'success': False, 'message': str(e)})
 
 if __name__ == '__main__':
+
     app.run(debug=True, host='0.0.0.0', port=5000)
