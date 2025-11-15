@@ -30,7 +30,7 @@ class SpatialAnalysisAPI:
         self.w = None
         self.results = {}
     
-def load_data(self, file_path, file_type='excel'):
+    def load_data(self, file_path, file_type='excel'):
         """加载数据"""
         try:
             if file_type == 'excel':
@@ -285,5 +285,6 @@ def get_data_info():
 if __name__ == '__main__':
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
